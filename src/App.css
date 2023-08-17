@@ -41,13 +41,14 @@
   color: #888;
 }
 
-.image-grid {
+/* App.css */
+.image-container {
   display: grid;
-  grid-template-columns: repeat(3, 1fr); /* Three columns with equal width */
-  gap: 20px; /* Gap between images */
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 30px;
 }
 
-.image-item {
+.image-container img {
   max-width: 100%;
   height: auto;
 }

@@ -7,9 +7,15 @@ function App() {
   const [imagesUrl, setImagesUrl] = useState([]);
   const [image, setImage] = useState([]);
   const [uploadOccurred, setUploadOccurred] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   const handleFileChange = (event) => {
-    setSelectedFile(event.target.files[0]);
+    const file = event.target.files[0];
+    if (file && file.type === "application/pdf") {
+      setSelectedFile(file);
+    } else {
+      alert("Please select a PDF file.");
+    }
   };
 
   const uploadEndpoint =
@@ -19,10 +25,10 @@ function App() {
   const endPointGet =
     "https://gucnmk1j8a.execute-api.us-east-1.amazonaws.com/dev/projects ";
 
-  console.log(selectedFile?.name, "selectedFile");
-
   const handleUpload = () => {
     if (selectedFile) {
+      setUploading(true);
+
       const payload = {
         document_name: selectedFile.name,
       };
@@ -35,58 +41,63 @@ function App() {
           },
         })
         .then((response) => {
-          console.log("File uploaded successfully:", response);
-          if (response) {
-            const { url, fields } = response.data.url; // Extract url and fields
-            const formData = new FormData(); // Create FormData object
+          setSelectedFile(null);
+          const { url, fields } = response.data.url;
+          const formData = new FormData();
 
-            for (const field in fields) {
-              formData.append(field, fields[field]);
-            }
-
-            // Append the actual file to the FormData
-            formData.append("file", selectedFile);
-
-            axios
-              .post(url, formData) // Use pre-signed URL to upload the file
-              .then((uploadResponse) => {
-                console.log("File uploaded to S3:", uploadResponse);
-
-                const { project_id } = response.data; // Extract project_id
-                const extractBody = {
-                  document_name: fields.key, // Use url.fields.key
-                  project_id: project_id,
-                };
-
-                axios
-                  .post(extractEndpoint, JSON.stringify(extractBody), {
-                    headers: {
-                      "Content-Type": "application/json",
-                    },
-                  })
-                  .then((response) => {
-                    console.log(response, "RESPONSE");
-                    setUploadOccurred(true); // Set uploadOccurred to true after extraction
-                  });
-              })
-              .catch((error) => console.log("Error uploading to S3:", error));
+          for (const field in fields) {
+            formData.append(field, fields[field]);
           }
+
+          formData.append("file", selectedFile);
+
+          axios
+            .post(url, formData)
+            .then(() => {
+              const { project_id } = response.data;
+              const extractBody = {
+                document_name: fields.key,
+                project_id: project_id,
+              };
+
+              axios
+                .post(extractEndpoint, JSON.stringify(extractBody), {
+                  headers: {
+                    "Content-Type": "application/json",
+                  },
+                })
+                .then(() => {
+                  setUploadOccurred(true);
+                  setUploading(false);
+                })
+                .catch((error) => {
+                  console.log("Error during extraction:", error);
+                  setUploading(false);
+                });
+            })
+            .catch((error) => {
+              console.log("Error uploading to S3:", error);
+              setUploading(false);
+            });
         })
         .catch((error) => {
           console.error("Error uploading file:", error);
+          setUploading(false);
         });
     }
   };
 
   useEffect(() => {
     axios.get(endPointGet).then((response) => {
-      const imageData = JSON.parse(response.data.body); // Parse the JSON string
-      setImagesUrl(imageData); // Set the parsed array as imagesUrl
-      setUploadOccurred(false);
+      try {
+        const imageData = JSON.parse(response.data.body);
+        setImagesUrl(imageData);
+        setUploadOccurred(false);
+      } catch (error) {
+        console.error("Error parsing image data:", error);
+      }
     });
   }, [uploadOccurred]);
-
-  console.log(imagesUrl, typeof imagesUrl, "TYPEOFDATA");
 
   const getData = (id) => {
     axios
@@ -102,23 +113,25 @@ function App() {
   return (
     <>
       <div>
-        <input type="file" onChange={handleFileChange} />
-        <button onClick={handleUpload}>Upload</button>
+        <input type="file" accept=".pdf" onChange={handleFileChange} />
+        <button onClick={handleUpload} disabled={uploading}>
+          {uploading ? "Uploading..." : "Upload"}
+        </button>
       </div>
 
       <div>
         <h2>Uploaded Images:</h2>
         <ul>
           {imagesUrl.map((imageId, index) => (
-            <li key={index}>
+            <li style={{ listStyle: "none" }} key={index}>
               <a href="#" onClick={() => getData(imageId)}>
-                {`image ${index}`}
+                {imageId}
               </a>
             </li>
           ))}
         </ul>
       </div>
-      <div>
+      <div className="image-container">
         {image.map((img, index) => (
           <img key={index} src={img} alt={`Image ${index}`} />
         ))}
